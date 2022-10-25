@@ -23,11 +23,27 @@ volatile uint8_t sci5_rxi_cnt;	// デバック用
 volatile uint8_t sci5_tei_cnt;  // デバック用
 
 
+// X軸、Y軸kの測定値の平均処理用
+// 測定値は12bitデータだが、上位 8bitだけ見ている
+uint8_t   tc_mcnt;	// 測定回数
+
+uint8_t   touch_x_val;		// X軸データ
+uint8_t   touch_y_val;          // Y軸データ
+
+uint8_t   touch_x[8];		// 8回分の測定値
+uint8_t   touch_y[8];
+
+
+uint16_t   touch_x_average;	// 平均値
+uint16_t   touch_y_average;
+
+
 //
 // 受信割り込み(SCI5) (タッチコントローラ XPT2046 通信用)
 // 28.5.6 シリアルデータの送受信同時動作( クロック同期式モード)
 //  受信から同時送受信へ切り替えるときには、SCI が受信完了状態であることを確認した後、SCR レジスタのRIE、RE ビットを“0” にしてから、
 //  エラーフラグ(SSR.ORER, FER, PER) が“0” であることを確認した後、SCR レジスタのTIE、RIE、TE、RE ビットを1 命令で同時に“1” にしてください。
+//
 //
 #pragma interrupt (Excep_SCI5_RXI5(vect=223))
 void Excep_SCI5_RXI5(void)
@@ -44,6 +60,8 @@ void Excep_SCI5_RXI5(void)
       else {                     // 最終データ受信済み
 	   
       	    xpt_rcv_cnt = 0;
+	    
+	    
       }
 }
 
@@ -174,48 +192,62 @@ void initSCI_5(void)
 	
 	xpt_rcv_cnt = 0;		// 受信データ数
 	
-	
 
 }
 
-
-// XPT2046への送信コマンド設定と最初の送信開始
-// 
-// 8bit,ディファレンシャル,オートパワーダウン
-//
-void xpt2046_cmd_set_0(void)
+// X軸、Y軸kの測定結果の平均値を得る
+// 12bitデータの上位 8bitを使用
+void xpt2046_cal_average(void)
 {
-	xpt_sd_data[0] = 0xdc;	// X軸読み出し,8bit,ディファレンシャル,オートパワーダウン(ペン割り込み有効)
-	xpt_sd_data[1] = 0x00;	// ダミーデータ　(読出しのためのクロック発生用)
-	xpt_sd_data[2] = 0x00;	// ダミーデータ　(読出しのためのクロック発生用)
+	uint32_t  i;
+	uint32_t  x_avg;
+	uint32_t  y_avg;
 	
-	xpt_sd_data[3] = 0x9c;	// Y軸読み出し,8bit,ディファレンシャル,オートパワーダウン(ペン割り込み有効)
-	xpt_sd_data[4] = 0x00;	// ダミーデータ　(読出しのためのクロック発生用)
-	xpt_sd_data[5] = 0x00;	// ダミーデータ　(読出しのためのクロック発生用)
 	
-	xpt_send_num = 6;	// 送信データ数 (XPT2046)
-	xpt_send_pt = 0;	// 送信データの位置の初期化
-  
-	sci5_rxi_cnt = 0;	// デバック用
-        sci5_tei_cnt = 0;	// デバック用
+	touch_x_val = xpt_rcv_data[1];	// X軸測定データの b11-b4
+	touch_y_val = xpt_rcv_data[4];  // Y軸測定データの b11-b4
 
-		
-	SCI5.SCR.BYTE = 0xf0;   // 送受信動作(TE,RE)と送受信割り込み(TIE,RIE)を許可
-	 			 // 最初の送信割り込みが発生する。
+	touch_x[tc_mcnt] = touch_x_val;
+	touch_y[tc_mcnt] = touch_y_val;
+	
+	if ( tc_mcnt < 7 ) {
+	
+	   tc_mcnt = tc_mcnt + 1;	// 測定回数のインクリメント
+	}
+	
+	else  {				// 平均値の計算
+	   
+	   x_avg = 0;
+	   y_avg = 0;
+	
+	   for ( i = 0 ; i < 8 ; i++ ) {	// 8回分の総和を得る 
+		   
+	      x_avg = x_avg + touch_x[i];
+	      y_avg = y_avg + touch_y[i];	   
+	
+	   }
+	   
+	   touch_x_average =  x_avg >> 3;   // 割る 8
+	   touch_y_average =  y_avg >> 3;   // 割る 8
+
+	   tc_mcnt = 0;			    // 測定回数のクリア	
+	}
+	
 }
 
 
-// XPT2046への送信コマンド設定と最初の送信開始
+//
+//  X軸、Y軸の読み出しコマンド設定と最初の送信開始
 // 
-// 12bit,ディファレンシャル,パワーダウン無し
+// 12bit,ディファレンシャル,オートパワーダウン
 //
 void xpt2046_cmd_set(void)
 {
-	xpt_sd_data[0] = 0xd7;	// X軸読み出し,12bit,ディファレンシャル,パワーダウン無し
+	xpt_sd_data[0] = 0xd4;	// X軸読み出し,12bit,ディファレンシャル,オートパワーダウン
 	xpt_sd_data[1] = 0x00;	// ダミーデータ　(読出しのためのクロック発生用)
 	xpt_sd_data[2] = 0x00;	// ダミーデータ　(読出しのためのクロック発生用)
 	
-	xpt_sd_data[3] = 0x97;	// Y軸読み出し,12bit,ディファレンシャル,パワーダウン無し
+	xpt_sd_data[3] = 0x94;	// Y軸読み出し,12bit,ディファレンシャル,オートパワーダウン
 	xpt_sd_data[4] = 0x00;	// ダミーデータ　(読出しのためのクロック発生用)
 	xpt_sd_data[5] = 0x00;	// ダミーデータ　(読出しのためのクロック発生用)
 	
@@ -225,7 +257,8 @@ void xpt2046_cmd_set(void)
 	sci5_rxi_cnt = 0;	// デバック用
         sci5_tei_cnt = 0;	// デバック用
 
-		
+	IEN(SCI5,TXI5) = 1;    // 送信割り込み許可		
 	SCI5.SCR.BYTE = 0xf0;   // 送受信動作(TE,RE)と送受信割り込み(TIE,RIE)を許可
 	 			 // 最初の送信割り込みが発生する。
 }
+

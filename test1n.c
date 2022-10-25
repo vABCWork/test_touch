@@ -6,6 +6,7 @@
 
 void clear_module_stop(void);
 
+
 void main(void)
 {
 	
@@ -13,15 +14,16 @@ void main(void)
 	
 	initSCI_5();		// SCI5(簡易SPI)  初期設定
 	
+	
 	while(1){
 	
-	   delay_msec(1);		// 1msec 待つ
-		
-	   xpt2046_cmd_set();     // タッチコントローラ XPT2046と送受信開始  (2Mbpsで25[usec]かかる )
+ 	   xpt2046_cmd_set();     // タッチコントローラ XPT2046と送受信開始  (2Mbpsで25[usec]かかる )
+
+	   delay_msec(1);		// 1msec 待つ (送受信終了待ち)
 	   
-	   IEN(SCI5,TXI5) = 1;    // 送信割り込み許可
-     
-	     
+	   xpt2046_cal_average();	// 平均値の計算
+
+
 	}
 	
 }

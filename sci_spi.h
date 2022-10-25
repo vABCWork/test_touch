@@ -23,8 +23,13 @@ extern volatile uint8_t sci5_tei_cnt;
 
 void initSCI_5(void);
 
+void xpt2046_cal_average(void);
+void xpt2046_cal_pressure(void);
+
+
 void xpt2046_cmd_set(void);
 
+void xpt2046_press_cmd_set(void);
 
 
 
